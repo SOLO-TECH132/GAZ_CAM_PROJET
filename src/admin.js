@@ -16,6 +16,8 @@ async function uploadImage(file) {
 
 
 
+
+
 /**
  * Ajoute un produit dans la base PostgreSQL via Express.
  */
@@ -281,4 +283,176 @@ document.getElementById("fichier_image").addEventListener("change", (e) => {
     }
 });
 
+
+
+/**
+ * @file admin.js
+ * @description Gestion de l'interface admin (commandes, produits, etc.).
+ */
+
+/**
+ * @typedef {Object} Commande
+ * @property {number} id
+ * @property {number} produit_id
+ * @property {string} nom_produit
+ * @property {number} quantite
+ * @property {number} prix
+ * @property {string} client_nom
+ * @property {string} client_tel
+ * @property {string} adresse
+ * @property {string} etat
+ * @property {string} marque
+ */
+
+/**
+ * Charge les commandes depuis l'API et les affiche dans la page admin.
+ * @returns {Promise<void>}
+ */
+async function chargerCommandes() {
+    const container = document.getElementById("listeCommandes");
+
+    // Vérification : si la page n'a pas ce container, on ne fait rien
+    if (!container) return;
+
+    try {
+        const res = await fetch("http://localhost:3000/api/admin/commandes");
+        /** @type {Commande[]} */
+        const commandes = await res.json();
+
+        // Construction du HTML
+container.innerHTML = commandes.map(c => `
+    <div class="commande-card p-4 bg-[#1C1A16] dark:bg-amber-50  rounded-lg border border-gray-700">
+
+        <h3 class="text-lg font-bold">${c.marque}</h3>
+        <p>Quantité : ${c.quantite}</p>
+        <p>Client : ${c.client_nom} (${c.client_tel})</p>
+        <p>Adresse : ${c.adresse}</p>
+
+        ${
+            c.etat === "en_attente"
+            ? `
+                <button data-id="${c.id}" class="btnValider bg-green-600 px-3 py-2 rounded">Valider</button>
+                <button data-id="${c.id}" class="btnRefuser bg-red-600 px-3 py-2 rounded">Refuser</button>
+              `
+            : c.etat === "valide"
+            ? `<p class="text-green-400 font-semibold mt-2">Commande validée ✔</p>`
+            : `<p class="text-red-400 font-semibold mt-2">Commande refusée ✖</p>`
+        }
+
+    </div>
+        `).join("");
+    } catch (err) {
+        console.error("Erreur chargement commandes admin:", err);
+    }
+}
+
+// Appel au chargement de la page
+document.addEventListener("DOMContentLoaded", () => {
+    chargerCommandes();
+});
+
+
+/**
+ * Envoie une requête pour valider une commande.
+ * @param {number} idCommande - ID de la commande à valider
+ * @returns {Promise<void>}
+ */
+async function validerCommandeAdmin(idCommande) {
+    try {
+        const res = await fetch(
+            `http://localhost:3000/api/admin/commandes/valider/${idCommande}`,
+            { method: "POST" }
+        );
+
+        if (!res.ok) {
+            alert("Erreur lors de la validation de la commande");
+            return;
+        }
+
+        alert("Commande validée !");
+        await chargerCommandes(); // recharge la liste
+    } catch (err) {
+        console.error("Erreur validerCommandeAdmin:", err);
+    }
+}
+
+/**
+ * Envoie une requête pour refuser une commande.
+ * @param {number} idCommande - ID de la commande à refuser
+ * @returns {Promise<void>}
+ */
+async function refuserCommandeAdmin(idCommande) {
+    try {
+        const res = await fetch(
+            `http://localhost:3000/api/admin/commandes/refuser/${idCommande}`,
+            { method: "POST" }
+        );
+
+        if (!res.ok) {
+            alert("Erreur lors du refus de la commande");
+            return;
+        }
+
+        alert("Commande refusée !");
+        await chargerCommandes();
+    } catch (err) {
+        console.error("Erreur refuserCommandeAdmin:", err);
+    }
+}
+
+/**
+ * Gestion globale des clics sur les boutons Valider / Refuser.
+ */
+document.addEventListener("click", async (e) => {
+
+    // ============================
+    // 🔥 Bouton VALIDER
+    // ============================
+    if (e.target.classList.contains("btnValider")) {
+        const id = Number(e.target.getAttribute("data-id"));
+
+        // Trouver la carte commande
+        const card = e.target.closest(".commande-card");
+
+        // 🔥 Remplacer les boutons par un texte
+        if (card) {
+            card.querySelector(".btnValider").remove();
+            card.querySelector(".btnRefuser").remove();
+
+            card.insertAdjacentHTML(
+                "beforeend",
+                `<p class="text-green-400 font-semibold mt-2">Commande validée ✔</p>`
+            );
+        }
+
+        // Appel API
+        await validerCommandeAdmin(id);
+        return;
+    }
+
+    // ============================
+    // 🔥 Bouton REFUSER
+    // ============================
+    if (e.target.classList.contains("btnRefuser")) {
+        const id = Number(e.target.getAttribute("data-id"));
+
+        // Trouver la carte commande
+        const card = e.target.closest(".commande-card");
+
+        // 🔥 Remplacer les boutons par un texte
+        if (card) {
+            card.querySelector(".btnValider").remove();
+            card.querySelector(".btnRefuser").remove();
+
+            card.insertAdjacentHTML(
+                "beforeend",
+                `<p class="text-red-400 font-semibold mt-2">Commande refusée ✖</p>`
+            );
+        }
+
+        // Appel API
+        await refuserCommandeAdmin(id);
+        return;
+    }
+});
 

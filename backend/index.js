@@ -9,7 +9,7 @@
  * - Connexion / Inscription
  * - Vérification PostgreSQL
  * - API simples
- * - Chargement des routes externes (produits, upload, admin)
+ * - Chargement des routes externes (produits, upload, admin, commandes)
  */
 
 const express = require('express');
@@ -20,12 +20,18 @@ const path = require('path');
 // Connexion PostgreSQL
 const pool = require("../backend/DB/connenxionDB");
 
-// Import des routes PRO (tu les ajouteras ici)
+// Import des routes PRO
 const produitsRoute = require("../backend/routes/produit");   // CRUD produits
-const uploadRoute = require("../backend/routes/upload");       // Upload image         // Login / Register
+const uploadRoute = require("../backend/routes/upload");      // Upload image
+const commandesRoute = require("../backend/routes/commandes"); // Commandes
+const adminRoutes = require("../backend/routes/adminRoutes")(pool);
+
+
+
 
 const app = express();
 const port = process.env.PORT || 3000;
+
 
 
 /* ==========================================================
@@ -39,6 +45,7 @@ app.use(express.urlencoded({ extended: true }));
 
 /**
  * Parse les données JSON envoyées par le frontend
+ * ⚠️ IMPORTANT : placé AVANT les routes pour que req.body fonctionne
  */
 app.use(express.json());
 
@@ -59,8 +66,7 @@ app.use(session({
     }
 }));
 
-
-
+app.use(adminRoutes);
 /**
  * Dossier statique (HTML, CSS, JS, images)
  * Permet d'accéder à /src/main.html, /src/style.css, etc.
@@ -72,9 +78,6 @@ app.use(express.static(path.join(__dirname, '..', 'src')));
  * (pour afficher les images des produits)
  */
 app.use("/uploads", express.static(path.join(__dirname,"./uploads")));
-
-
-
 
 
 /* ==========================================================
@@ -96,7 +99,6 @@ app.get('/', (req, res) => {
 app.get('/api/message', (req, res) => {
     res.json({ msg: "salut express !" });
 });
-
 
 
 /* ==========================================================
@@ -127,7 +129,6 @@ app.get("/theme", (req, res) => {
 });
 
 
-
 /* ==========================================================
    ROUTE : TEST CONNEXION DB
 ========================================================== */
@@ -145,7 +146,6 @@ app.get("/test-db", async (req, res) => {
         res.status(500).send("Connexion PostgreSQL échouée");
     }
 });
-
 
 
 /* ==========================================================
@@ -203,6 +203,7 @@ app.post("/login", async (req, res) => {
         }
 
         req.session.user = {
+             id: user.id,
             nom: user.nom,
             prenom: user.prenom,
             email: user.email,
@@ -223,6 +224,17 @@ app.post("/login", async (req, res) => {
     }
 });
 
+app.get("/me", (req, res) => {
+  if (req.session.user) {
+    res.json({ success: true, user: req.session.user });
+  } else {
+    res.json({ success: false, user: null });
+  }
+});
+
+
+
+
 /**
  * @route GET /logout
  * @description Déconnecte l'utilisateur et détruit la session
@@ -242,10 +254,14 @@ app.get("/me", (req, res) => {
 });
 
 
-
 /* ==========================================================
-   ROUTES EXTERNES (PRODUITS / UPLOAD / AUTH)
+   ROUTES EXTERNES (PRODUITS / UPLOAD / COMMANDES)
 ========================================================== */
+
+/**
+ * Routes commandes (enregistrement des commandes)
+ */
+app.use("/api", commandesRoute);
 
 /**
  * Routes produits (CRUD)
@@ -256,7 +272,6 @@ app.use("/api", produitsRoute);
  * Route upload image
  */
 app.use("/api", uploadRoute);
-
 
 
 /* ==========================================================

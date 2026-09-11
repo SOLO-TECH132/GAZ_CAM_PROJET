@@ -45,7 +45,37 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+   // Vérifie la session côté serveur
 
+
+fetch("/me", { credentials: "include" })
+  .then(res => res.json())
+  .then(data => {
+    console.log("Réponse /me :", data);
+
+    if (data.success) {
+      user = data.user;
+    } else {
+      user = null;
+    }
+    updateUI(); // 🔥 très important
+  })
+  .catch(err => {
+    console.error("Erreur /me :", err);
+    user = null;
+    updateUI();
+  });
+
+
+  function openConnexionModal() {
+    const modal = document.getElementById("connexion-modal");
+
+    modal.classList.remove("hidden");   // afficher
+    modal.removeAttribute("inert");     // autoriser le focus
+}
+
+
+ 
 
     /* ============================================================
        SESSION UTILISATEUR + AVATAR
@@ -77,12 +107,54 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    fetch("/me")
-        .then(res => res.json())
-        .then(data => {
-            user = data;
-            updateUI();
-        });
+
+ // 🔥 Déclare user UNE seule fois en haut
+function updateUI() {
+  console.log("updateUI appelé avec user :", user);
+
+  const btnCommandes = document.getElementById("btnCommandes");
+  const btnProduits = document.getElementById("btnProduits");
+
+  // 🔥 Ne jamais bloquer l’UI si ces liens n’existent pas
+  if (!btnCommandes || !btnProduits) {
+    console.warn("Les liens Commande/Produits ne sont pas dans cette page.");
+  }
+
+  if (user) {
+    // 🔥 connecté → afficher les liens si présents
+    if (btnCommandes) btnCommandes.classList.remove("hidden");
+    if (btnProduits) btnProduits.classList.remove("hidden");
+
+    // 🔥 afficher avatar
+    const prenom = user.prenom || "";
+    const nom = user.nom || "";
+    const initials =
+      (prenom.charAt(0).toUpperCase() || "") +
+      (nom.charAt(0).toUpperCase() || "");
+
+    const avatar = document.getElementById("userInitials");
+    if (avatar) avatar.textContent = initials;
+
+    document.getElementById("user-menu")?.classList.remove("hidden");
+    document.getElementById("guest-menu")?.classList.add("hidden");
+
+    // afficher le nom et lemail
+
+    document.getElementById("afficheNom").textContent =
+            `${prenom} ${nom}`;
+
+    document.getElementById("afficheEmail").textContent =
+            user.email;
+
+  } else {
+    // 🔥 déconnecté → cacher les liens si présents
+    if (btnCommandes) btnCommandes.classList.add("hidden");
+    if (btnProduits) btnProduits.classList.add("hidden");
+
+    document.getElementById("guest-menu")?.classList.remove("hidden");
+    document.getElementById("user-menu")?.classList.add("hidden");
+  }
+}
 
 
 
@@ -448,19 +520,274 @@ document.addEventListener("DOMContentLoaded", () => {
        REDIRECTION VERS LA PAGE PRODUIT PRODUIT
        ============================================================ */
 
-       async function requireAuth(redirectUrl) {
-    const rest = await fetch("/me");
-    const users = await rest.json();
 
-    if(!users) {
-        const modal = document.getElementById("connexion-modal")
-        modal.classList.remove("hidden")
-        return
+
+    async function requireAuth(redirectUrl) {
+    const rest = await fetch("/me", { credentials: "include" });
+    const data = await rest.json();
+
+    if (!data.success || !data.user) {
+    const modal = document.getElementById("connexion-modal");
+        // 🔥 attendre que Tailwind/Flowbite applique les styles
+        setTimeout(() => {
+            
+        modal.classList.remove("hidden");   // afficher
+        modal.removeAttribute("inert");  // 🔥 obligatoire
+
+        return;
+        }, 10);
+
+        return;
     }
 
-    window.location.href= redirectUrl
+    window.location.href = redirectUrl;
 }
 
+
+
+
+
+
+
+/* ============================================================
+      AFFICHAGE DES LIENS PRODUIT ET COMMANDE DANS LA NAVBAR
+       ============================================================ */
+
+
+function updateUI() {
+  if (user) {
+    // 🔥 connecté → afficher
+    document.getElementById("btnCommandes").classList.remove("hidden");
+    document.getElementById("btnProduits").classList.remove("hidden");
+  } else {
+    // 🔥 non connecté → cacher
+    document.getElementById("btnCommandes").classList.add("hidden");
+    document.getElementById("btnProduits").classList.add("hidden");
+  }
+}
+
+
+/* ============================================================
+       CARTE PRODUITS
+       ============================================================ */
+
+       
+let marker, map, produitSelectionne;
+
+function openMapModal() {
+    const modal = document.getElementById("commandeModal");
+
+    if (!modal) {
+        console.warn("⚠️ map-modal introuvable.");
+        return;
+    }
+
+    // Afficher le modal
+    modal.classList.remove("hidden");
+    modal.removeAttribute("inert");
+
+    // 🔥 IMPORTANT : attendre que le modal soit visible avant d'initialiser la map
+    setTimeout(() => {
+         // Initialiser la carte si pas déjà fait
+  if (!map) {
+    map = L.map('map').setView([3.8480, 11.5021], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    map.on('click', function(e) {
+      const { lat, lng } = e.latlng;
+      if (marker) map.removeLayer(marker);
+      marker = L.marker([lat, lng]).addTo(map);
+      document.getElementById("clientLocation").value = `${lat},${lng}`;
+    });
+  }
+    }, 150);
+}
+
+function openModal(p) {
+  produitSelectionne = p;
+  document.getElementById("commandeModal").classList.remove("hidden");
+
+}
+
+
+let mapInstance = null;
+
+// function initMap() {
+//     const mapContainer = document.getElementById("map");
+
+//     if (!mapContainer) {
+//         console.warn("⚠️ L'élément #map est introuvable.");
+//         return;
+//     }
+
+//     // Si une map existe déjà → on la détruit
+//     if (mapInstance !== null) {
+//         mapInstance.remove();
+//     }
+
+//     // Création de la map
+//     mapInstance = L.map("map").setView([3.8667, 11.5167], 13);
+
+//     // Ajouter la couche OpenStreetMap
+//     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+//         maxZoom: 19
+//     }).addTo(mapInstance);
+// }
+
+
+function closeModal() {
+  document.getElementById("commandeModal").classList.add("hidden");
+}
+
+function getMyLocation() {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(pos => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      map.setView([lat, lng], 15);
+      if (marker) map.removeLayer(marker);
+      marker = L.marker([lat, lng]).addTo(map);
+      document.getElementById("clientLocation").value = `${lat},${lng}`;
+    });
+  } else {
+    alert("La géolocalisation n'est pas supportée par votre navigateur.");
+  }
+}
+
+function validerCommande() {
+  const location = document.getElementById("clientLocation").value;
+  const quantite = document.getElementById("commandeQuantite").value;
+
+  if (!location) {
+    alert("Veuillez choisir une localisation sur la carte ou utiliser votre position.");
+    return;
+  }
+  
+   // Vérifier stock
+  if (quantite > produitSelectionne.stock) {
+    alert(`Stock insuffisant ! Vous avez demandé ${quantite}, mais il reste seulement ${produitSelectionne.stock} unités.`);
+    return; //
+  }
+
+  fetch("http://localhost:3000/api/commandes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      produit_id: produitSelectionne.id,
+      nom_produit: produitSelectionne.nom,
+      prix: produitSelectionne.prix,
+      quantite: quantite,
+      marque: produitSelectionne.marque,
+      client_nom: "Client inconnu",
+      client_tel: "237XXXXXXXXX",
+      adresse: location
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      const phone = "+237659310328";
+      const message = `Bonjour, je voudrais commander : ${produitSelectionne.marque} (${produitSelectionne.poids}kg) ${quantite} pieces au prix de ${produitSelectionne.prix*quantite} FCFA.
+Voici ma localisation : https://maps.google.com/?q=${location}`;
+      const encodedMessage = encodeURIComponent(message);
+      window.open(`https://wa.me/${phone}?text=${encodedMessage}`, "_blank");
+      closeModal();
+    } else {
+      alert("Erreur lors de la commande !");
+    }
+  })
+  .catch(err => console.error("Erreur commande :", err));
+}
+
+/* ===========================
+   * AFFICHAGE DES COMMANDES UTILISATEUR
+   * =========================== */
+
+ const container = document.getElementById("commandesContainer");
+
+if (container) {
+    fetch("/api/mes-commandes", {
+    method: "GET",
+    credentials: "include"
+})
+
+
+        .then(res => {
+        if (res.status === 401) {
+            const container = document.getElementById("commandesContainer");
+            container.innerHTML = `
+                <div class="p-4 bg-yellow-300 w-fit text-center text-black font-semibold rounded">
+                    ⚠️ Utilisateur non connecté
+                </div>
+            `;
+            return null; // stop ici
+        }
+        return res.json();
+    })
+        .then(data => {
+
+            if (!data) return;
+
+            if (!data.success) {
+                container.innerHTML = "<p>Veuillez vous connecter pour voir vos commandes.</p>";
+                return;
+            }
+            
+
+            if (!data.commandes || data.commandes.length === 0) {
+                container.innerHTML = "<p>Aucune commande trouvée.</p>";
+                return;
+            }
+
+            let html = `
+                <table class="w-full border-collapse mt-6 text-center bg-[#0A0908] dark:bg-taupe-50">
+                    <thead>
+                        <tr class="bg-orange-600 text-white">
+                            <th>Produit</th>
+                            <th>Prix</th>
+                            <th>Quantité</th>
+                            <th>Adresse</th>
+                            <th>Statut</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            data.commandes.forEach(c => {
+
+                let statutClass =
+                    c.etat === "valide" ? "text-green-600 font-bold" :
+                    c.etat === "refuse" ? "text-red-600 font-bold" :
+                    "text-orange-600 font-bold";
+
+                let statutTexte =
+                    c.etat === "valide" ? "Validée" :
+                    c.etat === "refuse" ? "Refusée" :
+                    "En attente";
+
+                html += `
+                    <tr class="border-b">
+                        <td>${c.nom_produit}</td>
+                        <td>${c.prix} FCFA</td>
+                        <td>${c.quantite}</td>
+                        <td>${c.adresse}</td>
+                        <td><span class="${statutClass}">${statutTexte}</span></td>
+                        <td>${new Date(c.created_at).toLocaleString()}</td>
+                    </tr>
+                `;
+            });
+
+            html += "</tbody></table>";
+            container.innerHTML = html;
+        })
+        .catch(err => {
+            console.error("Erreur affichage commandes :", err);
+            container.innerHTML = "<p>Erreur lors du chargement des commandes.</p>";
+        });
+}
 
 
 
@@ -513,8 +840,9 @@ async function displayProductsFromDB(brand) {
         brandProducts.innerHTML = produits.map(p => `
             <div class="bg-[#1C1A16] dark:bg-[#FFFFFF] p-6 rounded-lg w-full md:w-80 hover:-translate-y-1 transition-all">
                 <img src="http://localhost:3000/uploads/${p.fichier_image}" class="w-full h-64 object-contain bg-amber-50 rounded-lg">
-                <h2 class="text-2xl mt-4">bouteille de ${p.poids} kg</h2>
+                <h2 class="text-2xl mt-4 font-bold">bouteille de ${p.poids} kg</h2>
                 <p class="text-[#cf5407] font-bold text-xl">${p.prix} Fcfa</p>
+                <p class="text-white font-bold text-xl">stock : ${p.stock}</p>
                 <p class="text-gray-500 mt-2">La référence pour les familles nombreuses et petits commerces.</p>
                 <ul class="mt-4 text-sm text-gray-400 space-y-1">
                     <li>Échange bouteille vide inclus</li>
@@ -522,9 +850,11 @@ async function displayProductsFromDB(brand) {
                     <li>Kit détecteur de fuite offert</li>
                     <li>Abonnement mensuel disponible</li>
                 </ul>
-                <button class="mt-4 items-center w-full text-white dark:text-black bg-brand border border-orange-600 hover:bg-orange-600 rounded-base text-sm px-4 py-2.5">
-                    Commander
-                </button>
+
+
+            <button onclick='openModal(${JSON.stringify(p)})'  class="btnCommander  mt-4 items-center w-full text-white dark:text-black bg-brand border border-orange-600 hover:bg-orange-600 rounded-base text-sm px-4 py-2.5">Commander</button>
+
+
             </div>
         `).join("");
 
@@ -532,6 +862,13 @@ async function displayProductsFromDB(brand) {
         setTimeout(() => {
             panel.classList.remove("opacity-0", "translate-y-5");
         }, 10);
+
+        setTimeout(() => {
+        panel.scrollIntoView({
+            behavior: "smooth",
+            block: "start"
+        });
+    }, 300);
 
     } catch (err) {
         console.error("Erreur chargement produits :", err);
@@ -544,6 +881,43 @@ cards.forEach(card => {
         displayProductsFromDB(brand);
     });
 });
+
+//blocage de commande si non connecter
+
+async function isLogged() {
+    const res = await fetch("/me", { credentials: "include" });
+    const data = await res.json();
+    return data.success && data.user;
+}
+
+if (brandProducts) {
+    brandProducts.addEventListener("click", async (e) => {
+
+        if (!e.target.classList.contains("btnCommander")) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const logged = await isLogged();
+
+        const modalConnexion = document.getElementById("connexion-modal");
+        const modalmap = document.getElementById("map-modal"); // ID corrigé
+
+        // 🔥 utilisateur NON connecté → ouvrir modal de connexion
+        if (!logged) {
+            if (modalConnexion) {
+                modalmap.classList.add("hidden");
+                modalConnexion.classList.remove("hidden");
+                modalConnexion.removeAttribute("inert");
+            }
+            return;
+        }
+
+        // 🔥 utilisateur connecté → ouvrir modal de la map
+        openMapModal();
+    });
+}
+
 
 
 
